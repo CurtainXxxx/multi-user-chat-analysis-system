@@ -1,0 +1,8 @@
+chat_env/
+__pycache__/
+*.pyc
+chat_log.json
+词云图-费枭健.png
+词云图.png
+*.zip
+.DS_Store

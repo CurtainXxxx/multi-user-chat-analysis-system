@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多人在线聊天与智能分析系统</title>
+<style>
+/* ── 主题变量 ── */
+:root {
+  --bg: #e8eef2; --app-bg: #fff; --sidebar-bg: #2c3e50;
+  --sidebar-text: #ecf0f1; --sidebar-border: #3d566e;
+  --msg-bg: #fff; --msg-border: #e0e6ea; --msg-self-bg: #3498db;
+  --msg-self-text: #fff; --header-bg: #3498db; --header-text: #fff;
+  --input-bg: #fff; --input-border: #d5dbe0; --input-text: #333;
+  --messages-bg: #f7f9fb; --system-bg: #fef9e7; --system-text: #7d6608;
+  --stat-bg: #eaf2f8; --stat-text: #1a5276;
+  --whisper-bg: #f3e5f5; --whisper-text: #6a1b9a;
+  --typing-text: #95a5a6;
+}
+.dark {
+  --bg: #1a1a2e; --app-bg: #16213e; --sidebar-bg: #0f3460;
+  --sidebar-text: #e0e0e0; --sidebar-border: #1a4a7a;
+  --msg-bg: #1e3a5f; --msg-border: #2a4a7a; --msg-self-bg: #e94560;
+  --header-bg: #0f3460; --header-text: #e0e0e0;
+  --input-bg: #1e3a5f; --input-border: #2a4a7a; --input-text: #e0e0e0;
+  --messages-bg: #1a1a2e; --system-bg: #2d2d0f; --system-text: #ffd700;
+  --stat-bg: #1a3a4a; --stat-text: #7ec8e3;
+  --whisper-bg: #2d1a3a; --whisper-text: #ce93d8;
+  --typing-text: #666; --gray: #aaa;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Microsoft YaHei','微软雅黑',sans-serif; background:var(--bg); height:100vh; display:flex; justify-content:center; align-items:center; transition:background .3s; }
+#app { width:900px; max-width:100vw; height:95vh; background:var(--app-bg); border-radius:12px; box-shadow:0 4px 30px rgba(0,0,0,.15); display:flex; overflow:hidden; transition:background .3s; }
+
+/* ── 侧栏 ── */
+#sidebar { width:200px; background:var(--sidebar-bg); color:var(--sidebar-text); display:flex; flex-direction:column; transition:background .3s; }
+#sidebar h3 { padding:16px; font-size:14px; border-bottom:1px solid var(--sidebar-border); text-align:center; }
+#online-list { flex:1; overflow-y:auto; padding:8px; list-style:none; }
+#online-list li { padding:8px 12px; border-radius:6px; margin:2px 0; font-size:13px; display:flex; align-items:center; gap:6px; cursor:pointer; }
+#online-list li:hover { background:rgba(255,255,255,.1); }
+#online-list li .dot { width:8px; height:8px; background:#2ecc71; border-radius:50%; flex-shrink:0; }
+#online-count { padding:12px 16px; font-size:12px; color:var(--gray, #95a5a6); border-top:1px solid var(--sidebar-border); }
+#sidebar-footer { padding:8px; border-top:1px solid var(--sidebar-border); text-align:center; }
+#theme-btn { background:none; border:1px solid var(--sidebar-border); color:var(--sidebar-text); padding:6px 14px; border-radius:14px; font-size:12px; cursor:pointer; }
+#theme-btn:hover { background:rgba(255,255,255,.1); }
+
+/* ── 主内容 ── */
+#main { flex:1; display:flex; flex-direction:column; min-width:0; }
+#header { padding:12px 20px; background:var(--header-bg); color:var(--header-text); font-size:16px; font-weight:bold; display:flex; align-items:center; justify-content:space-between; transition:background .3s; }
+#header .subtitle { font-size:11px; opacity:.8; font-weight:normal; }
+
+/* 消息区 */
+#messages { flex:1; overflow-y:auto; padding:16px; background:var(--messages-bg); display:flex; flex-direction:column; gap:8px; transition:background .3s; }
+
+.msg { max-width:75%; padding:10px 14px; border-radius:12px; line-height:1.5; word-break:break-all; animation:fadeIn .2s; }
+.msg.chat { background:var(--msg-bg); border:1px solid var(--msg-border); align-self:flex-start; }
+.msg.chat.self { background:var(--msg-self-bg); color:var(--msg-self-text); border-color:var(--msg-self-bg); align-self:flex-end; }
+.msg.whisper { background:var(--whisper-bg); color:var(--whisper-text); border:1px dashed #ce93d8; align-self:flex-start; }
+.msg.whisper.self { align-self:flex-end; opacity:.85; }
+.msg .meta { font-size:11px; color:#7f8c8d; margin-bottom:4px; }
+.msg.self .meta, .msg.whisper.self .meta { color:rgba(255,255,255,.8); }
+.msg .text { font-size:14px; white-space:pre-wrap; }
+.msg.system { align-self:center; max-width:90%; background:var(--system-bg); color:var(--system-text); border:1px solid #f9e79f; font-size:13px; text-align:center; }
+.msg.stat { align-self:center; max-width:90%; background:var(--stat-bg); color:var(--stat-text); border:1px solid #aed6f1; font-size:13px; text-align:center; }
+.msg.stat img { max-width:300px; margin-top:8px; border-radius:8px; }
+
+@keyframes fadeIn { from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:translateY(0);} }
+
+/* 正在输入 */
+#typing-indicator { height:20px; padding:0 20px 4px; font-size:12px; color:var(--typing-text); font-style:italic; }
+
+/* 输入区 */
+#input-area { padding:12px 16px; border-top:1px solid var(--input-border); display:flex; gap:8px; align-items:center; background:var(--input-bg); transition:background .3s; }
+#input-area input { flex:1; padding:10px 14px; border:1px solid var(--input-border); border-radius:20px; font-size:14px; outline:none; background:var(--input-bg); color:var(--input-text); transition:all .2s; }
+#input-area input:focus { border-color:var(--msg-self-bg); }
+#input-area button { padding:8px 18px; border:none; border-radius:20px; font-size:13px; cursor:pointer; transition:all .2s; white-space:nowrap; }
+.btn-send { background:#3498db; color:#fff; }
+.btn-send:hover { background:#2980b9; }
+.btn-cmd { background:#ecf0f1; color:#2c3e50; }
+.btn-cmd:hover { background:#d5dbe0; }
+.btn-crawl { background:#e8f8f5; color:#117a65; }
+.btn-crawl:hover { background:#d1f2eb; }
+
+/* 登录 */
+#login-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.5); display:flex; justify-content:center; align-items:center; z-index:100; }
+#login-box { background:var(--app-bg); padding:30px 40px; border-radius:12px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.2); }
+#login-box h2 { margin-bottom:8px; color:var(--header-bg); }
+#login-box p { margin-bottom:16px; color:#7f8c8d; font-size:13px; }
+#login-box input { width:220px; padding:10px 14px; border:2px solid var(--input-border); border-radius:8px; font-size:15px; text-align:center; outline:none; background:var(--input-bg); color:var(--input-text); }
+#login-box input:focus { border-color:#3498db; }
+#login-box button { margin-top:12px; padding:10px 40px; background:#3498db; color:#fff; border:none; border-radius:8px; font-size:15px; cursor:pointer; }
+#login-box button:hover { background:#2980b9; }
+
+/* 指令提示卡片 */
+#help-card { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:var(--app-bg); padding:24px 32px; border-radius:12px; box-shadow:0 8px 40px rgba(0,0,0,.3); z-index:200; min-width:300px; }
+#help-card h3 { margin-bottom:12px; color:var(--header-bg); }
+#help-card .cmd { display:flex; gap:12px; margin:8px 0; font-size:14px; }
+#help-card .cmd code { background:var(--messages-bg); padding:2px 8px; border-radius:4px; font-size:13px; min-width:100px; text-align:center; }
+#help-card .cmd span { color:var(--typing-text, #666); font-size:13px; }
+#help-card button { margin-top:12px; padding:6px 20px; border:none; border-radius:8px; background:#3498db; color:#fff; cursor:pointer; }
+#help-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.3); z-index:199; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="sidebar">
+    <h3>👥 在线用户</h3>
+    <ul id="online-list"><li style="color:#95a5a6">加载中...</li></ul>
+    <div id="online-count">共 0 人在线</div>
+    <div id="sidebar-footer">
+      <button id="theme-btn" onclick="toggleTheme()">🌙 暗色模式</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="header">
+      <span>💬 多人在线聊天与智能分析系统</span>
+      <span class="subtitle" id="header-user"></span>
+    </div>
+    <div id="messages"></div>
+    <div id="typing-indicator"></div>
+    <div id="input-area">
+      <input type="text" id="input-msg" placeholder="输入消息（@用户名 可私聊）" maxlength="500" autofocus>
+      <button class="btn-send" onclick="sendMessage()">发送</button>
+      <button class="btn-cmd" onclick="sendCommand('!stat')">📊 词频</button>
+      <button class="btn-crawl" onclick="crawlUrl()">🔍 爬取</button>
+      <button class="btn-cmd" onclick="showHelp()">❓</button>
+    </div>
+  </div>
+</div>
+
+<div id="login-overlay">
+  <div id="login-box">
+    <h2>🚀 加入聊天室</h2>
+    <p>请输入你的真实姓名</p>
+    <input type="text" id="login-name" placeholder="姓名" maxlength="20" autofocus>
+    <br>
+    <button onclick="doLogin()">进入聊天室</button>
+  </div>
+</div>
+
+<div id="help-overlay" onclick="hideHelp()"></div>
+<div id="help-card">
+  <h3>📖 指令说明</h3>
+  <div class="cmd"><code>消息文本</code><span>发送聊天消息</span></div>
+  <div class="cmd"><code>@用户名 消息</code><span>私聊某人（仅对方可见）</span></div>
+  <div class="cmd"><code>!stat</code><span>统计聊天 TOP5 高频词 + 生成词云</span></div>
+  <div class="cmd"><code>!crawl 网址</code><span>爬取网页并分析内容</span></div>
+  <div class="cmd"><code>!quit</code><span>退出聊天室</span></div>
+  <button onclick="hideHelp()">知道了</button>
+</div>
+
+<script>
+let username = '', ws = null, theme = 'light', typingTimer = null, typingUsers = {};
+
+// ── 主题切换 ──
+function toggleTheme() {
+  theme = theme === 'light' ? 'dark' : 'light';
+  document.documentElement.className = theme;
+  document.getElementById('theme-btn').textContent = theme === 'dark' ? '☀️ 亮色模式' : '🌙 暗色模式';
+  localStorage.setItem('chat-theme', theme);
+}
+(function(){
+  if (localStorage.getItem('chat-theme') === 'dark') toggleTheme();
+})();
+
+// ── 提示音（Web Audio API，无需音频文件） ──
+function playSound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    if (type === 'msg') {
+      o.frequency.value = 800; o.type = 'sine'; g.gain.value = 0.08;
+      o.start(); o.stop(ctx.currentTime + 0.05);
+    } else if (type === 'whisper') {
+      o.frequency.value = 1200; o.type = 'sine'; g.gain.value = 0.06;
+      o.start(); o.stop(ctx.currentTime + 0.08);
+      setTimeout(() => { const o2=ctx.createOscillator(); o2.connect(g); o2.frequency.value=1000; o2.start(); o2.stop(ctx.currentTime+0.06); }, 60);
+    }
+  } catch(e) {}
+}
+
+// ── 登录 ──
+function doLogin() {
+  const name = document.getElementById('login-name').value.trim();
+  if (!name) { alert('请输入姓名'); return; }
+  username = name;
+  document.getElementById('header-user').textContent = username;
+  document.getElementById('login-overlay').style.display = 'none';
+  connect();
+}
+document.getElementById('login-name').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+// ── WebSocket ──
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => ws.send(username);
+  ws.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'userlist') {
+      updateOnlineUsers(data.users);
+    } else if (data.type === 'typing') {
+      showTypingIndicator(data.user);
+    } else if (data.type === 'system' && data.content.includes('已被占用')) {
+      // 重名，退回登录界面
+      alert(data.content);
+      ws.close();
+      document.getElementById('login-overlay').style.display = 'flex';
+      document.getElementById('login-name').value = '';
+      document.getElementById('login-name').focus();
+      username = '';
+      return;
+    } else {
+      appendMessage(data);
+      if (data.type === 'whisper' && !data.self) playSound('whisper');
+      else if (data.type === 'chat' && !data.self) playSound('msg');
+      if (data.users) updateOnlineUsers(data.users);
+    }
+  };
+}
+
+// ── 消息渲染 ──
+function appendMessage(data) {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg ' + data.type;
+  if (data.self) div.classList.add('self');
+  let html = '';
+  if (data.type === 'chat' || data.type === 'whisper') {
+    html = `<div class="meta">${data.time} · ${data.type==='whisper'?'🔒 ':''}${data.user}</div>`;
+    html += `<div class="text">${escapeHtml(data.content)}</div>`;
+  } else {
+    html = `<div class="text">${escapeHtml(data.content)}</div>`;
+    if (data.wordcloud) html += `<br><img src="${data.wordcloud}?t=${Date.now()}" alt="词云" onclick="this.style.width=this.style.width==='100%'?'300px':'100%'">`;
+  }
+  div.innerHTML = html;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+function escapeHtml(str) { const d=document.createElement('div'); d.textContent=str; return d.innerHTML; }
+
+// ── 正在输入 ──
+function showTypingIndicator(user) {
+  typingUsers[user] = Date.now();
+  updateTypingDisplay();
+}
+function updateTypingDisplay() {
+  const now = Date.now();
+  const active = Object.entries(typingUsers).filter(([,t]) => now - t < 2000).map(([u]) => u);
+  Object.keys(typingUsers).forEach(u => { if (now - typingUsers[u] > 2000) delete typingUsers[u]; });
+  const el = document.getElementById('typing-indicator');
+  el.textContent = active.length ? active.join(', ') + ' 正在输入...' : '';
+  if (active.length) setTimeout(updateTypingDisplay, 1500);
+}
+function notifyTyping() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  clearTimeout(typingTimer);
+  ws.send('!typing');
+  typingTimer = setTimeout(() => {}, 1500);
+}
+
+// ── 在线用户 ──
+function updateOnlineUsers(users) {
+  const list = document.getElementById('online-list');
+  if (!users || !users.length) { list.innerHTML='<li style="color:#95a5a6">暂无用户</li>'; }
+  else { list.innerHTML = users.map(u => `<li onclick="atUser('${escapeHtml(u)}')"><span class="dot"></span>${escapeHtml(u)}</li>`).join(''); }
+  document.getElementById('online-count').textContent = `共 ${users?users.length:0} 人在线`;
+}
+function atUser(name) {
+  const input = document.getElementById('input-msg');
+  input.value = '@' + name + ' ' + input.value;
+  input.focus();
+}
+
+// ── 发送 ──
+function sendMessage() {
+  const input = document.getElementById('input-msg');
+  const msg = input.value.trim();
+  if (!msg || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(msg);
+  input.value = '';
+  input.focus();
+}
+document.getElementById('input-msg').addEventListener('keydown', e => { if(e.key==='Enter') sendMessage(); });
+document.getElementById('input-msg').addEventListener('input', notifyTyping);
+
+function sendCommand(cmd) { if(ws&&ws.readyState===WebSocket.OPEN) ws.send(cmd); }
+function crawlUrl() {
+  const url = prompt('请输入要爬取的网址：', 'https://www.baidu.com');
+  if (url && ws && ws.readyState === WebSocket.OPEN) ws.send('!crawl ' + url.trim());
+}
+
+// ── 帮助面板 ──
+function showHelp() { document.getElementById('help-overlay').style.display='block'; document.getElementById('help-card').style.display='block'; }
+function hideHelp() { document.getElementById('help-overlay').style.display='none'; document.getElementById('help-card').style.display='none'; }
+</script>
+</body>
+</html>
